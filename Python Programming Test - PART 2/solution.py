@@ -26,6 +26,7 @@ with open(filename,'r') as csvfile:
                 topper_dict[fields[i]] = int(row[i])
                 name_dict[fields[i]] = row[0]
             total_sum += int(row[i])
+            
         
          # Here the time complexity is log(k) for push and pop operations
         # the time complexity for searching the top 3 rank is O(N log(k)) and space complexity is O(k)(where k=3) ~ constant.
