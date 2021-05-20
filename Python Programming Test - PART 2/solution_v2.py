@@ -32,7 +32,7 @@ with open(filename,'r') as csvfile:
         
         # Here the time complexity is log(k) for push and pop operations
         # the time complexity for searching the top 3 rank is O(N log(k)) and space complexity is O(k)(where k=3) ~ constant.
-        # Sorting takes time complexity of O(N log(N)) and space complexity of O(N)
+        # When we use sorting,it takes time complexity of O(N log(N)) and space complexity of O(N)
 
         if len(heap) < number_of_toppers:              
             heapq.heappush(heap,(total_sum,row[0]))
@@ -50,6 +50,9 @@ for i in range(1,len(fields)):
         print(f"\nTopper in {fields[i]} is {name_dict[fields[i]][0]}.")
 
 print(f'\nBest Students in the class are {heap[1][1]}, {heap[2][1]} and {heap[0][1]}.\n')
+
+
+#The time Complexity of this program is O(N*M) (where N - rows and M - columns)
 
 '''
             Heap Structure
