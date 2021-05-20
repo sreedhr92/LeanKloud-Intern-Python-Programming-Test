@@ -1,18 +1,28 @@
-from flask import Flask
+from os import access
+from flask import Flask, request
 import mysql.connector
 from datetime import date
 from flask_restplus import Api, Resource, fields
 from werkzeug.middleware.proxy_fix import ProxyFix
+from functools import wraps
 
 app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app)
+authorization = {
+    'apikey' : {
+        'type' : 'apiKey',
+        'in' : 'header',
+        'name' : 'User-Access'
+    }
+}
 api = Api(app, version='1.0', title='TodoMVC API',
-    description='A simple TodoMVC API',
+    description='A simple TodoMVC API',authorizations=authorization
 )
 db = mysql.connector.connect(host = "localhost",user="sree",passwd="sree",database="user")
 
 
 ns = api.namespace('todos', description='TODO operations')
+
 
 todo = api.model('Todo', {
     'id': fields.Integer(readonly=True, description='The task unique identifier'),
@@ -22,6 +32,46 @@ todo = api.model('Todo', {
     
 })
 
+def readAccess(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        name = None
+        if 'User-Access' in request.headers:
+            name = request.headers['User-Access']
+        if not name:
+            return { 'message ': 'Authentication Required '} ,401
+        
+        cur = db.cursor()
+        cur.execute("select access from user where name=%s",(name,))
+        output = cur.fetchall()
+        if len(output) == 0:
+            return {'message' : 'User not found'} , 402
+        return f(*args, **kwargs)
+
+    return decorated
+
+
+def writeAccess(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        name = None
+        if 'User-Access' in request.headers:
+            name = request.headers['User-Access']
+        if not name:
+            return { 'message ': 'Authentication Required '},401
+        cur = db.cursor()
+        cur.execute("select access from user where name=%s",(name,))
+        output = cur.fetchall()
+        if len(output) == 0:
+            return {'message' : 'User not found'},402
+        for i in output:
+            access = i[0]
+        if access != 'write':
+            return {'message': 'Need Write Access'},403
+
+        return f(*args, **kwargs)
+    return decorated
+        
 
 class TodoDAO(object):
     def __init__(self):
@@ -121,10 +171,15 @@ DAO.create({'task': 'profit!'})'''
 
 @ns.route('/')
 @ns.response(201, 'Operation Success')
+@ns.response(401, 'Authorization needed')
+@ns.response(402, 'User not found')
+@ns.response(403, 'Need Write Access')
 class TodoList(Resource):
     '''Shows a list of all todos, and lets you POST to add new tasks'''
     @ns.doc('list_todos')
     @ns.marshal_list_with(todo)
+    @api.doc(security='apikey')
+    @readAccess
     def get(self):
         '''List all tasks'''
         cur = db.cursor()
@@ -140,6 +195,8 @@ class TodoList(Resource):
     @ns.doc('create_todo')
     @ns.expect(todo)
     @ns.marshal_with(todo, code=201)
+    @api.doc(security='apikey')
+    @writeAccess
     def post(self):
         '''Create a new task'''
         return DAO.create(api.payload), 201
@@ -147,17 +204,25 @@ class TodoList(Resource):
 
 @ns.route('/<int:id>')
 @ns.response(404, 'Todo not found')
+@ns.response(401, 'Authorization needed')
+@ns.response(402, 'User not found')
+@ns.response(403, 'Need Write Access')
+@ns.response(204, 'Operation Success')
 @ns.param('id', 'The task identifier')
 class Todo(Resource):
     '''Show a single todo item and lets you delete them'''
     @ns.doc('get_todo')
     @ns.marshal_with(todo)
+    @api.doc(security='apikey')
+    @readAccess
     def get(self, id):
         '''Fetch a given resource'''
         return DAO.get(id)
 
     @ns.doc('delete_todo')
     @ns.response(204, 'Todo deleted')
+    @api.doc(security='apikey')
+    @writeAccess
     def delete(self, id):
         '''Delete a task given its identifier'''
         DAO.delete(id)
@@ -165,6 +230,8 @@ class Todo(Resource):
 
     @ns.expect(todo)
     @ns.marshal_with(todo)
+    @api.doc(security='apikey')
+    @writeAccess
     def put(self, id):
         '''Update a task given its identifier'''
         return DAO.update(id, api.payload)
@@ -173,6 +240,9 @@ class Todo(Resource):
 
 @ns.route('/<int:id><string:status>')
 @ns.response(404, 'Todo not found')
+@ns.response(401, 'Authorization needed')
+@ns.response(402, 'User not found')
+@ns.response(403, 'Need Write Access')
 @ns.param('id', 'The task identifier')
 @ns.param('status', 'The task status')
 class Status(Resource):
@@ -181,41 +251,75 @@ class Status(Resource):
     @ns.doc('change_status_todo')
     @ns.expect(todo)
     @ns.marshal_with(todo)
+    @api.doc(security='apikey')
+    @writeAccess
     def put(self, id,status):
         '''Update a task's status given its identifier'''
         return DAO.update_status(id, status)
 
 @ns.route('/due/<date>')
 @ns.response(404, 'Todo not found')
+@ns.response(401, 'Authorization needed')
+@ns.response(402, 'User not found')
+@ns.response(403, 'Need Write Access')
 @ns.param('id', 'The task identifier')
 @ns.param('date', 'Date of the task(YYYY-MM-DD)')
 class Due(Resource):
     '''Shows the list of all todo's which are due to be finished on that specific date'''
     @ns.doc('get_todo')
     @ns.marshal_with(todo)
+    @api.doc(security='apikey')
+    @readAccess
     def get(self, date):
         '''Fetch the list of all todo's which are due to be finished '''
         return DAO.getDueTasks(date)
 
 @ns.route('/overdue')
 @ns.response(404, 'Todo not found')
+@ns.response(401, 'Authorization needed')
+@ns.response(402, 'User not found')
+@ns.response(403, 'Need Write Access')
 class Overdue(Resource):
     '''Shows the list of all todo's which are passed their due date'''
     @ns.doc('get_todo')
     @ns.marshal_with(todo)
+    @api.doc(security='apikey')
+    @readAccess
     def get(self):
         '''Fetch the list of all todo's which are passed their due date'''
         return DAO.getOverDueTasks()
 
 @ns.route('/finished')
 @ns.response(404, 'Todo not found')
+@ns.response(401, 'Authorization needed')
+@ns.response(402, 'User not found')
+@ns.response(403, 'Need Write Access')
 class Finished(Resource):
     '''Shows the list of all todo's which are finished'''
     @ns.doc('get_todo')
     @ns.marshal_with(todo)
+    @api.doc(security='apikey')
+    @readAccess
     def get(self):
         '''Fetch the list of all todo's which are finished'''
         return DAO.getFinishedTasks()
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+'''
+
+CREATE TABLE `user`.`user` (
+  `name` VARCHAR(45) NOT NULL,
+  `access` VARCHAR(45) NOT NULL,
+  PRIMARY KEY (`name`));
+
+
+CREATE TABLE `user`.`tasks` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `task` VARCHAR(45) NOT NULL,
+  `dueby` DATE NOT NULL,
+  `status` VARCHAR(45) NOT NULL,
+  PRIMARY KEY (`id`));
+  
+'''

@@ -21,16 +21,4 @@ for i in output:
   "status": "In progress"
 }
 
-
-CREATE TABLE `user`.`user` (
-  `name` VARCHAR(45) NOT NULL,
-  `access` VARCHAR(45) NOT NULL,
-  PRIMARY KEY (`name`));
-
-
-CREATE TABLE `user`.`tasks` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `task` VARCHAR(45) NOT NULL,
-  `dueby` DATE NOT NULL,
-  `status` VARCHAR(45) NOT NULL,
-  PRIMARY KEY (`id`));'''
+'''
